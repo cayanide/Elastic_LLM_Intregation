@@ -33,7 +33,7 @@ import time
 
 # Load our secret sauce (environment variables) without spilling any beans.
 load_dotenv()
-API_KEY = os.getenv("API_KEY")
+API_KEY = os.getenv("API_KEY") #Open AI API KEY
 ES_HOST = os.getenv("ES_HOST", "http://localhost:9200")
 ES_USERNAME = os.getenv("ES_USERNAME", "elastic")
 ES_PASSWORD = os.getenv("ES_PASSWORD")
