@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Enhanced Elasticsearch Query Builder - Text Mode</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-gray-100 min-h-screen p-8">
+        <div class="max-w-4xl mx-auto">
+            <h1 class="text-3xl font-bold mb-6">
+                Enhanced Elasticsearch Query Builder - Text Mode
+            </h1>
+
+            <!-- Error Notification -->
+            <div
+                id="errorNotification"
+                class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative"
+                role="alert"
+            >
+                <span id="errorMessage" class="block sm:inline"></span>
+            </div>
+
+            <!-- Text Prompt Mode Section -->
+            <div id="textPromptMode">
+                <div>
+                    <h2 class="text-xl font-semibold">Select Fields</h2>
+                    <div class="mb-4">
+                        <label class="flex items-center space-x-2">
+                            <input
+                                type="checkbox"
+                                id="returnAllFields"
+                                class="form-checkbox"
+                            />
+                            <span>Return All Fields</span>
+                        </label>
+                    </div>
+                    <div
+                        id="fieldsContainer"
+                        class="grid grid-cols-3 gap-2"
+                    ></div>
+                </div>
+                <textarea
+                    id="textPrompt"
+                    class="w-full h-32 p-4 border rounded mb-4"
+                    placeholder="Write your query..."
+                ></textarea>
+                <button
+                    id="sendPrompt"
+                    class="bg-blue-500 text-white px-4 py-2 rounded mr-2"
+                >
+                    Submit Query
+                </button>
+            </div>
+
+            <!-- Results Section -->
+            <div id="results" class="mt-6 bg-white p-4 shadow rounded">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold">Query Results</h2>
+                    <div class="space-x-2">
+                        <button
+                            id="viewResults"
+                            class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded transition duration-200"
+                            onclick="window.location.href='/view-response'"
+                        >
+                            View Detailed Results
+                        </button>
+                        <button
+                            id="refreshResults"
+                            class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded transition duration-200"
+                            onclick="refreshResults()"
+                        >
+                            Refresh Results
+                        </button>
+                    </div>
+                </div>
+                <pre
+                    id="queryResults"
+                    class="overflow-auto bg-gray-100 p-4 rounded"
+                ></pre>
+            </div>
+
+            <!-- Home Button -->
+            <div class="mt-6">
+                <button
+                    onclick="window.location.href='/home';"
+                    class="bg-green-500 text-white px-4 py-2 rounded"
+                >
+                    Go to Home
+                </button>
+            </div>
+        </div>
+
+        <script>
+            document.addEventListener("DOMContentLoaded", () => {
+                const textPromptButton = document.getElementById("sendPrompt");
+                const fieldsContainer =
+                    document.getElementById("fieldsContainer");
+                const returnAllFieldsCheckbox =
+                    document.getElementById("returnAllFields");
+                const queryResults = document.getElementById("queryResults");
+                const errorNotification =
+                    document.getElementById("errorNotification");
+                const errorMessage = document.getElementById("errorMessage");
+                const resultsContainer =
+                    document.getElementById("resultsContainer");
+
+                function showError(message) {
+                    errorMessage.textContent = message;
+                    errorNotification.classList.remove("hidden");
+                }
+
+                function hideError() {
+                    errorNotification.classList.add("hidden");
+                }
+
+                // Populate the checkboxes dynamically
+                function populateFields(fields) {
+                    fieldsContainer.innerHTML = fields
+                        .map(
+                            (field) => `
+                    <label class="flex items-center space-x-2">
+                        <input type="checkbox" name="selected_fields" value="${field}" class="form-checkbox" />
+                        <span>${field}</span>
+                    </label>`,
+                        )
+                        .join("");
+
+                    returnAllFieldsCheckbox.addEventListener("change", () => {
+                        fieldsContainer
+                            .querySelectorAll("input[type='checkbox']")
+                            .forEach(
+                                (checkbox) =>
+                                    (checkbox.checked =
+                                        returnAllFieldsCheckbox.checked),
+                            );
+                    });
+                }
+
+                // Fetch the available fields for checkboxes
+                function fetchFields() {
+                    fetch("/get-fields")
+                        .then((response) => response.json())
+                        .then((data) => {
+                            if (data.error) {
+                                console.error(data.error);
+                                return;
+                            }
+                            populateFields(data.fields);
+                        })
+                        .catch((error) => {
+                            console.error("Error fetching fields:", error);
+                            showError("Failed to load fields.");
+                        });
+                }
+
+                // Function to handle the cleaned data and display results
+                function handleCleanedData(cleanedData) {
+                    if (cleanedData.error) {
+                        showError("Error cleaning input: " + cleanedData.error);
+                        return;
+                    }
+
+                    // Show the generated query
+                    const queryText = JSON.stringify(
+                        cleanedData.query,
+                        null,
+                        2,
+                    );
+                    queryResults.textContent = queryText;
+
+                    // Show success message and enable view results button
+                    document.getElementById("viewResults").disabled = false;
+                }
+
+                // Refresh results function
+                window.refreshResults = function () {
+                    const currentQuery =
+                        document.getElementById("textPrompt").value;
+                    if (currentQuery) {
+                        textPromptButton.click(); // Re-submit the current query
+                    }
+                };
+
+                // On submit button click, gather the selected fields and send the request
+                textPromptButton.addEventListener("click", () => {
+                    const selectedFields = Array.from(
+                        fieldsContainer.querySelectorAll(
+                            "input[name='selected_fields']:checked",
+                        ),
+                    ).map((checkbox) => checkbox.value);
+
+                    const requestData = {
+                        text_query: document.getElementById("textPrompt").value,
+                        selected_fields: selectedFields,
+                        return_all_fields: returnAllFieldsCheckbox.checked,
+                    };
+
+                    fetch("/clean-input", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(requestData),
+                    })
+                        .then((response) => response.json())
+                        .then((cleanedData) => {
+                            handleCleanedData(cleanedData);
+                        })
+                        .catch((error) => {
+                            console.error(
+                                "Error processing cleaned data:",
+                                error,
+                            );
+                            showError("Failed to process the cleaned input.");
+                        });
+                });
+
+                // Fetch available fields when the page loads
+                fetchFields();
+            });
+        </script>
+    </body>
+</html>

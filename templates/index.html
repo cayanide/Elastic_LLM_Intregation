@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Enhanced Query Builder</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+
+    <body class="bg-gray-100 min-h-screen p-8">
+        <div class="max-w-4xl mx-auto">
+            <!-- Header -->
+            <h1 class="text-3xl font-bold mb-6">
+                Enhanced Elasticsearch Query Builder
+            </h1>
+
+            <!-- Error Notification -->
+            <div
+                id="errorNotification"
+                class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative"
+                role="alert"
+            >
+                <span id="errorMessage" class="block sm:inline"></span>
+            </div>
+
+            <!-- Mode Toggle Button -->
+            <button
+                id="toggleMode"
+                class="mb-4 bg-blue-500 text-white px-4 py-2 rounded"
+            >
+                Switch to Text Prompt Mode
+            </button>
+
+            <!-- Loading Indicator -->
+            <div id="loadingIndicator" class="hidden text-center mb-4">
+                <p class="text-blue-600">Loading...</p>
+            </div>
+
+            <!-- Card Mode Section -->
+            <div id="cardMode">
+                <form
+                    id="queryForm"
+                    class="bg-white p-6 shadow rounded space-y-4"
+                >
+                    <!-- Field Selection Section -->
+                    <div>
+                        <h2 class="text-xl font-semibold">Select Fields</h2>
+                        <div class="mb-4">
+                            <label class="flex items-center space-x-2">
+                                <input
+                                    type="checkbox"
+                                    id="returnAllFields"
+                                    class="form-checkbox"
+                                />
+                                <span>Return All Fields</span>
+                            </label>
+                        </div>
+                        <div
+                            id="fieldsContainer"
+                            class="grid grid-cols-3 gap-2"
+                        ></div>
+                    </div>
+
+                    <!-- Conditions Section -->
+                    <div>
+                        <h2 class="text-xl font-semibold">Add Conditions</h2>
+                        <div id="conditionsContainer"></div>
+                        <button
+                            type="button"
+                            id="addCondition"
+                            class="mt-2 bg-green-500 text-white px-3 py-1 rounded"
+                        >
+                            Add Condition
+                        </button>
+                    </div>
+
+                    <!-- Logical Operator Selection -->
+                    <div>
+                        <label for="logicalOperator" class="font-semibold"
+                            >Logical Operator:</label
+                        >
+                        <select id="logicalOperator" class="border p-2 rounded">
+                            <option value="AND">AND</option>
+                            <option value="OR">OR</option>
+                        </select>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button
+                        type="submit"
+                        class="bg-green-500 text-white px-4 py-2 rounded"
+                    >
+                        Generate Query
+                    </button>
+                </form>
+            </div>
+
+            <!-- Text Prompt Mode Section -->
+            <div id="textPromptMode" class="hidden">
+                <div>
+                    <h2 class="text-xl font-semibold">Select Fields</h2>
+                    <div class="mb-4">
+                        <label class="flex items-center space-x-2">
+                            <input
+                                type="checkbox"
+                                id="returnAllFields"
+                                class="form-checkbox"
+                            />
+                            <span>Return All Fields</span>
+                        </label>
+                    </div>
+                    <div
+                        id="fieldsContainer"
+                        class="grid grid-cols-3 gap-2"
+                    ></div>
+                </div>
+                <textarea
+                    id="textPrompt"
+                    class="w-full h-32 p-4 border rounded mb-4"
+                    placeholder="Write your query..."
+                ></textarea>
+                <button
+                    id="sendPrompt"
+                    class="bg-blue-500 text-white px-4 py-2 rounded"
+                >
+                    Submit Query
+                </button>
+            </div>
+
+            <!-- Results Section -->
+            <div id="results" class="mt-6 bg-white p-4 shadow rounded">
+                <h2 class="text-xl font-semibold mb-2">Query Results</h2>
+                <pre
+                    id="queryResults"
+                    class="overflow-auto bg-gray-100 p-4 rounded"
+                ></pre>
+            </div>
+        </div>
+        <div id="conditionTemplate" class="hidden">
+            <div class="flex items-center space-x-4 mb-2 condition">
+                <select name="field" class="border p-2 rounded">
+                    <!-- Options will be dynamically populated -->
+                </select>
+                <select name="operator" class="border p-2 rounded">
+                    <option value="contains">Contains</option>
+                    <option value="equals">Equals</option>
+                    <option value="greaterThan">Greater Than</option>
+                    <option value="lessThan">Less Than</option>
+                    <option value="greaterThanOrEqual">
+                        Greater Than or Equal
+                    </option>
+                    <option value="lessThanOrEqual">Less Than or Equal</option>
+                </select>
+
+                <input type="text" name="value" class="border p-2 rounded" />
+                <button type="button" class="remove-condition text-red-600">
+                    Remove
+                </button>
+            </div>
+        </div>
+
+        <script>
+            document.addEventListener("DOMContentLoaded", () => {
+                // DOM Elements
+                const toggleModeButton = document.getElementById("toggleMode");
+                const cardMode = document.getElementById("cardMode");
+                const textPromptMode =
+                    document.getElementById("textPromptMode");
+                const queryForm = document.getElementById("queryForm");
+                const addConditionButton =
+                    document.getElementById("addCondition");
+                const conditionsContainer = document.getElementById(
+                    "conditionsContainer",
+                );
+                const fieldsContainer =
+                    document.getElementById("fieldsContainer");
+                const returnAllFieldsCheckbox =
+                    document.getElementById("returnAllFields");
+                const queryResults = document.getElementById("queryResults");
+                const errorNotification =
+                    document.getElementById("errorNotification");
+                const errorMessage = document.getElementById("errorMessage");
+                const textPromptButton = document.getElementById("sendPrompt");
+
+                // New Elements for Field Selection after Query Submission
+                const fieldSelectionModal = document.createElement("div");
+                fieldSelectionModal.id = "fieldSelectionModal";
+                fieldSelectionModal.classList.add(
+                    "hidden",
+                    "fixed",
+                    "top-0",
+                    "left-0",
+                    "w-full",
+                    "h-full",
+                    "bg-gray-800",
+                    "bg-opacity-50",
+                    "flex",
+                    "justify-center",
+                    "items-center",
+                );
+                fieldSelectionModal.innerHTML = `
+                <div class="bg-white p-6 rounded shadow-lg w-96">
+                    <h2 class="text-xl font-semibold mb-4">Select Fields to Return</h2>
+                    <div id="fieldChoicesContainer" class="space-y-2 mb-4"></div>
+                    <button id="submitFieldChoices" class="bg-blue-500 text-white px-4 py-2 rounded">Submit</button>
+                    <button id="cancelFieldSelection" class="bg-gray-500 text-white px-4 py-2 rounded ml-2">Cancel</button>
+                </div>
+            `;
+                document.body.appendChild(fieldSelectionModal);
+
+                // Utility Functions
+                function showError(message) {
+                    errorMessage.textContent = message;
+                    errorNotification.classList.remove("hidden");
+                }
+
+                function hideError() {
+                    errorNotification.classList.add("hidden");
+                }
+
+                function updateConditionDropdowns(fields) {
+                    const dropdowns = conditionsContainer.querySelectorAll(
+                        "select[name='field']",
+                    );
+                    dropdowns.forEach((dropdown) => {
+                        dropdown.innerHTML =
+                            '<option value="">Select Field</option>';
+                        fields.forEach((field) => {
+                            dropdown.innerHTML += `<option value="${field}">${field}</option>`;
+                        });
+                    });
+                }
+
+                function populateFields(fields) {
+                    console.log("Populating fields:", fields); // Log fields
+                    fieldsContainer.innerHTML = fields
+                        .map(
+                            (field) => `
+                        <label class="flex items-center space-x-2">
+                            <input type="checkbox" name="selected_fields" value="${field}" class="form-checkbox" />
+                            <span>${field}</span>
+                        </label>`,
+                        )
+                        .join("");
+
+                    // Handle "Return All Fields" toggle
+                    returnAllFieldsCheckbox.addEventListener("change", () => {
+                        fieldsContainer
+                            .querySelectorAll("input[type='checkbox']")
+                            .forEach((checkbox) => {
+                                checkbox.checked =
+                                    returnAllFieldsCheckbox.checked;
+                            });
+                    });
+                }
+
+                // Toggle between Card Mode and Text Prompt Mode
+                // Toggle between Card Mode and Text Prompt Mode
+                toggleModeButton.addEventListener("click", () => {
+                    // Redirect to the /textsearch route when switching to Text Prompt Mode
+                    window.location.href = "/textsearch";
+                });
+
+                // Fetch fields dynamically and populate UI
+                function fetchFields() {
+                    console.log("Fetching fields..."); // Log fetch process
+                    fetch("/get-fields")
+                        .then((response) => response.json())
+                        .then((data) => {
+                            console.log("Fetched fields:", data); // Log fetched fields
+                            if (data.error) {
+                                console.error(data.error);
+                                return;
+                            }
+                            const fields = data.fields;
+
+                            // Populate fields
+                            populateFields(fields);
+
+                            // Populate condition dropdowns for card mode
+                            updateConditionDropdowns(fields);
+                        })
+                        .catch((error) => {
+                            console.error("Error fetching fields:", error);
+                            showError("Failed to load fields.");
+                        });
+                }
+
+                // Show Field Selection Modal after Text Query Submission
+                function showFieldSelectionModal(fields) {
+                    const fieldChoicesContainer = document.getElementById(
+                        "fieldChoicesContainer",
+                    );
+                    fieldChoicesContainer.innerHTML = fields
+                        .map(
+                            (field) => `
+                        <label class="flex items-center space-x-2">
+                            <input type="checkbox" value="${field}" class="form-checkbox field-choice" />
+                            <span>${field}</span>
+                        </label>`,
+                        )
+                        .join("");
+
+                    fieldSelectionModal.classList.remove("hidden");
+
+                    // Handle submission of field choices
+                    document
+                        .getElementById("submitFieldChoices")
+                        .addEventListener("click", () => {
+                            const selectedFields = Array.from(
+                                fieldChoicesContainer.querySelectorAll(
+                                    "input[type='checkbox']:checked",
+                                ),
+                            ).map((checkbox) => checkbox.value);
+
+                            console.log("Selected fields:", selectedFields); // Log selected fields
+                            if (selectedFields.length === 0) {
+                                showError("Please select at least one field.");
+                                return;
+                            }
+
+                            // Send selected fields to the backend (can be part of the query)
+                            const requestData = {
+                                selected_fields: selectedFields,
+                            };
+
+                            fetch("/generate-query", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify(requestData),
+                            })
+                                .then((response) => response.json())
+                                .then((data) => {
+                                    queryResults.textContent = JSON.stringify(
+                                        data,
+                                        null,
+                                        2,
+                                    );
+                                    fieldSelectionModal.classList.add("hidden");
+                                })
+                                .catch((error) => {
+                                    console.error(
+                                        "Error generating query:",
+                                        error,
+                                    );
+                                    showError("Failed to generate query.");
+                                });
+                        });
+
+                    // Handle cancellation of field selection
+                    document
+                        .getElementById("cancelFieldSelection")
+                        .addEventListener("click", () => {
+                            fieldSelectionModal.classList.add("hidden");
+                        });
+                }
+
+                // Handle form submission (for card mode)
+                queryForm.addEventListener("submit", (event) => {
+                    event.preventDefault();
+
+                    const selectedFields = Array.from(
+                        fieldsContainer.querySelectorAll(
+                            "input[name='selected_fields']:checked",
+                        ),
+                    ).map((checkbox) => checkbox.value);
+
+                    console.log(
+                        "Selected fields from query form:",
+                        selectedFields,
+                    ); // Log selected fields
+
+                    const conditions = Array.from(
+                        conditionsContainer.querySelectorAll(".condition"),
+                    ).map((condition) => {
+                        return {
+                            field: condition.querySelector(
+                                "select[name='field']",
+                            ).value,
+                            operator: condition.querySelector(
+                                "select[name='operator']",
+                            ).value,
+                            value: condition.querySelector(
+                                "input[name='value']",
+                            ).value,
+                        };
+                    });
+
+                    console.log("Conditions from query form:", conditions); // Log conditions
+
+                    const requestData = {
+                        selected_fields: selectedFields,
+                        conditions,
+                        logical_operator:
+                            document.getElementById("logicalOperator").value,
+                        return_all_fields: returnAllFieldsCheckbox.checked,
+                    };
+
+                    fetch("/generate-query", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(requestData),
+                    })
+                        .then((response) => response.json())
+                        .then((data) => {
+                            queryResults.textContent = JSON.stringify(
+                                data,
+                                null,
+                                2,
+                            );
+                            fetchFields(); // Refresh fields after query submission
+                        })
+                        .catch((error) => {
+                            console.error("Error generating query:", error);
+                            showError("Failed to generate query.");
+                        });
+                });
+
+                // Handle text prompt submission (for text prompt mode)
+                textPromptButton.addEventListener("click", () => {
+                    const selectedFields = Array.from(
+                        fieldsContainer.querySelectorAll(
+                            "input[name='selected_fields']:checked",
+                        ),
+                    ).map((checkbox) => checkbox.value);
+
+                    console.log(
+                        "Selected fields from text prompt:",
+                        selectedFields,
+                    ); // Log selected fields
+                    const textPrompt =
+                        document.getElementById("textPrompt").value;
+
+                    if (!textPrompt.trim()) {
+                        showError("Please enter a query.");
+                        return;
+                    }
+
+                    hideError();
+
+                    const requestData = {
+                        selected_fields: selectedFields,
+                        text_query: textPrompt,
+                        return_all_fields: returnAllFieldsCheckbox.checked,
+                    };
+
+                    fetch("/generate-query", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(requestData),
+                    })
+                        .then((response) => response.json())
+                        .then((data) => {
+                            queryResults.textContent = JSON.stringify(
+                                data,
+                                null,
+                                2,
+                            );
+                            showFieldSelectionModal(data.fields);
+                        })
+                        .catch((error) => {
+                            console.error("Error generating query:", error);
+                            showError("Failed to generate query.");
+                        });
+                });
+
+                // Initial fetch of fields when loading the page
+                fetchFields();
+            });
+
+            document.addEventListener("DOMContentLoaded", () => {
+                // DOM Elements
+                const addConditionButton =
+                    document.getElementById("addCondition");
+                const conditionsContainer = document.getElementById(
+                    "conditionsContainer",
+                );
+                const fieldsContainer =
+                    document.getElementById("fieldsContainer");
+
+                // Add condition dynamically
+                addConditionButton.addEventListener("click", () => {
+                    const conditionTemplate = document
+                        .getElementById("conditionTemplate")
+                        .cloneNode(true);
+                    conditionTemplate.classList.remove("hidden");
+
+                    // Populate fields dropdown for this condition
+                    const fields = Array.from(
+                        fieldsContainer.querySelectorAll(
+                            "input[name='selected_fields']:checked",
+                        ),
+                    ).map((checkbox) => checkbox.value);
+                    const fieldDropdown = conditionTemplate.querySelector(
+                        "select[name='field']",
+                    );
+                    fields.forEach((field) => {
+                        const option = document.createElement("option");
+                        option.value = field;
+                        option.textContent = field;
+                        fieldDropdown.appendChild(option);
+                    });
+
+                    // Append the new condition to the container
+                    conditionsContainer.appendChild(conditionTemplate);
+
+                    // Add the functionality to remove the condition
+                    conditionTemplate
+                        .querySelector(".remove-condition")
+                        .addEventListener("click", () => {
+                            conditionTemplate.remove();
+                        });
+                });
+            });
+        </script>
+    </body>
+</html>
